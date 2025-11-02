@@ -1,0 +1,348 @@
+openapi: 3.0.3
+info:
+  title: easyTurn API
+  version: 1.0.0
+  description: |-
+    API para la gestión de reservas de la plataforma easyTurn.
+    Permite a los dueños de negocios gestionar sus perfiles, servicios y agenda,
+    y a los clientes finales consultar disponibilidad y crear reservas.
+servers:
+  - url: http://localhost:3000
+    description: Servidor de Desarrollo
+  - url: https://staging.easyturn.app
+    description: Servidor de Staging
+  - url: https://api.easyturn.app
+    description: Servidor de Producción
+
+paths:
+  /api/auth/register:
+    post:
+      summary: Registrar un nuevo dueño de negocio
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+              required: [email, password]
+      responses:
+        '201':
+          description: Usuario creado y sesión iniciada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSuccess'
+        '400':
+          description: El email ya existe o los datos son inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/login:
+    post:
+      summary: Iniciar sesión
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+              required: [email, password]
+      responses:
+        '200':
+          description: Sesión iniciada correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSuccess'
+        '401':
+          description: Credenciales inválidas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/businesses:
+    post:
+      summary: Crear o actualizar el perfil de un negocio
+      tags: [Businesses]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 3
+                logo_url:
+                  type: string
+                  format: uri
+      responses:
+        '200':
+          description: Perfil del negocio actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Business'
+        '400':
+          description: Datos inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: No autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/services:
+    post:
+      summary: Crear un nuevo servicio para un negocio
+      tags: [Services]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 3
+                duration_minutes:
+                  type: integer
+                  minimum: 15
+                price:
+                  type: number
+                  minimum: 0
+      responses:
+        '201':
+          description: Servicio creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+        '400':
+          description: Datos inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: No autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/availability:
+    get:
+      summary: Obtener horarios disponibles para una fecha y servicio
+      tags: [Public]
+      parameters:
+        - name: businessId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: serviceId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Lista de horarios disponibles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                  example: "14:30"
+        '404':
+          description: Negocio o servicio no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/appointments:
+    get:
+      summary: Obtener las citas de un negocio para un rango de fechas
+      tags: [Appointments]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Lista de citas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Appointment'
+        '401':
+          description: No autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Crear una nueva cita (reserva)
+      tags: [Public]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                businessId:
+                  type: string
+                  format: uuid
+                serviceId:
+                  type: string
+                  format: uuid
+                startTime:
+                  type: string
+                  format: date-time
+                clientName:
+                  type: string
+                clientEmail:
+                  type: string
+                  format: email
+              required: [businessId, serviceId, startTime, clientName, clientEmail]
+      responses:
+        '201':
+          description: Cita creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+        '409':
+          description: Conflicto, el horario ya no está disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    AuthSuccess:
+      type: object
+      properties:
+        access_token:
+          type: string
+        user:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            email:
+              type: string
+              format: email
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          example: "INVALID_INPUT"
+        message:
+          type: string
+          example: "El campo 'email' es inválido."
+    Business:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        logo_url:
+          type: string
+          format: uri
+    Service:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        duration_minutes:
+          type: integer
+        price:
+          type: number
+    Appointment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        client_name:
+          type: string
+        client_email:
+          type: string
+          format: email
+        service:
+          $ref: '#/components/schemas/Service'
